@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Webnovel Radar at 08:00 Beijing time
+
+[Timer]
+OnCalendar=*-*-* 08:00:00 Asia/Shanghai
+Persistent=true
+RandomizedDelaySec=30
+Unit=webnovel-radar.service
+
+[Install]
+WantedBy=timers.target

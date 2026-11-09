@@ -1,0 +1,13 @@
+[Unit]
+Description=Webnovel Radar daily report
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/daily-news
+Environment=HOME=%h
+Environment=PATH=%h/.opencode/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/daily-news/scripts/run_daily.sh
+TimeoutStartSec=1800
+Nice=10

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "ai-radar": {
+      "source": "learnprompt/ai-news-radar",
+      "sourceType": "github",
+      "skillPath": "skills/radar/SKILL.md",
+      "computedHash": "f8c56e4e7be6561e5be448c821c966bfad9a8091bf43ddc58738a15aaa273819"
+    },
+    "twitter-reader": {
+      "source": "daymade/claude-code-skills",
+      "sourceType": "github",
+      "skillPath": "twitter-reader/SKILL.md",
+      "computedHash": "c54241cc891c7e0aff254a68f4d6dbb48bb762d3be0f146a1fcacaafbff6f5dc"
+    }
+  }
+}
