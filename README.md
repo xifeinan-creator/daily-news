@@ -21,17 +21,66 @@ deploy/webnovel-radar.timer      systemd 定时器
 ## 服务器部署
 
 ```bash
-sudo apt update && sudo apt install -y git python3 curl ca-certificates
+# 基础依赖；ripgrep 是 opencode 的搜索依赖，缺失时它会尝试从 GitHub 下载并可能卡住
+sudo apt update && sudo apt install -y git python3 curl ca-certificates ripgrep
 
 # 安装 opencode，固定与本地一致的 1.19.0
 curl -fsSL https://opencode.ai/install | bash -s -- --version 1.19.0
+```
 
+如果 `opencode.ai` 报 `Connection reset`，改用 npm 镜像安装同一个二进制：
+
+```bash
+(
+set -euo pipefail
+arch="$(uname -m)"
+case "$arch" in
+  x86_64) pkg="opencode-linux-x64" ;;
+  aarch64|arm64) pkg="opencode-linux-arm64" ;;
+  *) echo "unsupported arch: $arch"; exit 1 ;;
+esac
+if [[ "$pkg" == "opencode-linux-x64" ]] && ! grep -qwi avx2 /proc/cpuinfo; then
+  pkg="opencode-linux-x64-baseline"
+fi
+ver="1.19.0"
+tmp="$(mktemp -d)"
+curl -fL --retry 3 -o "$tmp/opencode.tgz" "https://registry.npmmirror.com/${pkg}/-/${pkg}-${ver}.tgz"
+tar -xzf "$tmp/opencode.tgz" -C "$tmp"
+mkdir -p "$HOME/.opencode/bin"
+install -m 755 "$tmp/package/bin/opencode" "$HOME/.opencode/bin/opencode"
+rm -rf "$tmp"
+export PATH="$HOME/.opencode/bin:$PATH"
+opencode --version
+)
+grep -q '.opencode/bin' ~/.bashrc || echo 'export PATH="$HOME/.opencode/bin:$PATH"' >> ~/.bashrc
+```
+
+拉取仓库：
+
+```bash
 git clone https://github.com/xifeinan-creator/daily-news.git ~/daily-news
 cd ~/daily-news
+```
 
+如果服务器访问 GitHub 超时，可以在本地打包后通过 `scp` 上传：
+
+```bash
+# 本地（在仓库根目录执行）
+tar -czf ../daily-news-upload.tar.gz --exclude=.git --exclude=reports --exclude=logs .
+scp ../daily-news-upload.tar.gz ecs-user@<服务器IP>:~/
+
+# 服务器
+mkdir -p ~/daily-news
+tar -xzf ~/daily-news-upload.tar.gz -C ~/daily-news
+cd ~/daily-news
+```
+
+配置密钥并手动试跑：
+
+```bash
 # 密钥放在仓库外，避免被 agent 或 git 碰到
 mkdir -p ~/.config/webnovel-radar
-cp .env.example ~/.config/webnovel-radar/env
+cp -n .env.example ~/.config/webnovel-radar/env
 chmod 600 ~/.config/webnovel-radar/env
 # 编辑 ~/.config/webnovel-radar/env，至少填写 DEEPSEEK_API_KEY 和 SERVERCHAN_SENDKEY
 
@@ -90,11 +139,31 @@ systemctl --user status webnovel-radar.timer
 更新代码：
 
 ```bash
+# 如果服务器是 git clone 的
 cd ~/daily-news && git pull
+
+# 如果是 scp 上传的（没有 .git），重新打包上传后解压覆盖
+# 本地（在仓库根目录执行）：
+tar -czf ../daily-news-upload.tar.gz --exclude=.git --exclude=reports --exclude=logs .
+scp ../daily-news-upload.tar.gz ecs-user@<服务器IP>:~/
+# 服务器：
+tar -xzf ~/daily-news-upload.tar.gz -C ~/daily-news
 ```
+
+## 当前部署状态（2026-11-09）
+
+- 服务器：Ubuntu 24.04，opencode 1.19.0，ripgrep 已安装
+- 定时器：已启用，每天 08:00（`Asia/Shanghai`），`Persistent=true`，`Linger=yes`
+- 首次手动运行：成功生成 14 条日报并推送
+- 服务器代码通过 tarball + scp 部署，没有 `.git`
+- 已知网络限制：GitHub 与 opencode.ai 不稳定；`r.jina.ai` 不可达；报告会在末尾标注本次未覆盖的源
+- 报告与日志只在服务器：报告保留 7 天，日志保留 14 天
 
 ## 排查
 
+- **安装 opencode 时报 `Connection reset`**：国内服务器访问 `opencode.ai` 不稳定，改用上面的 npmmirror 安装方式。
+- **`git clone` 超时**：服务器到 GitHub 的 Git 连接不稳定，改用本地打包 + `scp` 上传。
+- **opencode 启动卡住，日志出现 `downloading ripgrep`**：先执行 `sudo apt install -y ripgrep`，确认 `rg --version` 可用。
 - **opencode 未找到**：确认 `~/.opencode/bin/opencode` 存在，或在 `.env` 设置 `OPENCODE_BIN`。
 - **报告未生成**：查看 `logs/run-YYYY-MM-DD.log` 和 `journalctl --user -u webnovel-radar`；脚本会自动重试一次。
 - **搜索源返回 202/429**：属正常限流，日报会继续使用直连源，并在文末标注“搜索源本次未覆盖”。
